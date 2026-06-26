@@ -1,0 +1,8 @@
+services:
+  ticket-sorter:
+    build:
+      context: .
+    container_name: ticket_sorter
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
