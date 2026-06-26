@@ -1,0 +1,59 @@
+# Poridhi Lab VM compose: pulls pre-built images from DockerHub.
+# Replace <dockerhub-username> with your DockerHub username before running
+# on the VM, or override with: DOCKERHUB_USER=yourname docker compose -f docker-compose.vm.yml up -d
+#
+# Usage on the VM:
+#   DOCKERHUB_USER=yourname docker compose -f docker-compose.vm.yml up -d
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ticket_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ticket_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ticket_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - ticket-net
+
+  backend:
+    image: ${DOCKERHUB_USER:-<dockerhub-username>}/ticket-analyzer-backend:v1
+    container_name: ticket_backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ticket_db
+      MODEL_NAME: distilbert-base-uncased-finetuned-sst-2-english
+      HF_HOME: /opt/hf-cache
+      TRANSFORMERS_OFFLINE: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ticket-net
+
+  frontend:
+    image: ${DOCKERHUB_USER:-<dockerhub-username>}/ticket-analyzer-frontend:v1
+    container_name: ticket_frontend
+    environment:
+      VITE_API_BASE_URL: /api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - ticket-net
+
+volumes:
+  pgdata:
+
+networks:
+  ticket-net:
+    driver: bridge

@@ -1,0 +1,61 @@
+# Local development compose: builds backend + frontend from source.
+# Use this for `docker compose up --build` during the workshop.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ticket_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ticket_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ticket_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ticket-net
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ticket_backend
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ticket_db
+      MODEL_NAME: distilbert-base-uncased-finetuned-sst-2-english
+      HF_HOME: /opt/hf-cache
+      TRANSFORMERS_OFFLINE: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - ticket-net
+    # No host port mapping needed locally because the frontend Nginx
+    # reverse-proxies /api to backend on the Docker network. Uncomment
+    # the next line if you want to hit the API directly from the host.
+    # ports:
+    #   - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: ticket_frontend
+    environment:
+      VITE_API_BASE_URL: /api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - ticket-net
+
+volumes:
+  pgdata:
+
+networks:
+  ticket-net:
+    driver: bridge
